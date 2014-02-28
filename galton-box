@@ -1,0 +1,126 @@
+globals [
+  balls        ;; how many balls have been created
+  counters     ;; agentset of patches where ball counts are displayed
+]
+
+;; We use two breeds of turtle: one for balls which are still falling,
+;; and second for balls which have landed in piles.
+breed [falling-balls falling-ball]
+breed [piled-balls piled-ball]
+
+;;; SETUP PROCEDURES
+
+to setup
+  clear-all
+  set-default-shape turtles "circle"
+  set balls 0
+  ask patch 0 (max-pycor - 2) [
+    sprout 1 [ propagate ]
+  ]
+  set counters patches with [counter?]
+  ask counters [
+    set plabel 0
+    set pcolor green - 3
+    ;; make the column numbers at the bottom
+    ask patch pxcor min-pycor [
+      set plabel round (abs pxcor / 2)
+    ]
+  ]
+  reset-ticks
+end
+
+;; The way we make the pegs is a bit tricky.  We use turtles,
+;; starting with one turtle at the top.  Each turtle colors
+;; the patch yellow, then creates two more turtles, one below
+;; and left, one below and right.  The parent dies, and the
+;; the cycle continues until the last row has been made.
+;; This procedure is recursive.
+to propagate  ;; peg procedure
+  if ycor < max-pycor - 2 - 2 * number-of-rows [ die ]
+  set pcolor yellow
+  set ycor ycor - 2
+  hatch 1 [
+    set xcor xcor - 1
+    propagate
+  ]
+  hatch 1 [
+    set xcor xcor + 1
+    propagate
+  ]
+  die
+end
+
+to-report counter?  ;; patch procedure
+  report (yellow-at? 1 2 or yellow-at? -1 2)
+    and not yellow-at? -2 0
+    and not yellow-at? 2 0
+end
+
+to-report yellow-at? [x-offset y-offset] ;; patch procedure
+  let p patch-at x-offset y-offset
+  report p != nobody and [pcolor] of p = yellow
+end
+
+;;; GO PROCEDURES
+
+to go
+  if time-for-new-ball? [ new-ball ]
+  if full? [
+    ask falling-balls with [ycor > [pycor] of one-of counters] [
+      set balls balls - 1
+      die
+    ]
+  ]
+  if not any? falling-balls [ stop ]
+  ask falling-balls [ fall ]
+  ask falling-balls-on counters [
+    set plabel plabel + 1
+    if not pile-up? [ die ]
+  ]
+  tick
+end
+
+to fall  ;; falling-balls procedure
+  ifelse [pcolor] of patch-at 0 -1 = yellow
+  ;; if peg below, go left or right
+  [ ifelse random-float 100 < chance-of-bouncing-right
+      [ set xcor xcor + 1 ]
+      [ set xcor xcor - 1 ]
+  ]
+  ;; if no peg below, go down
+  [ set ycor ycor - 1
+    if done-falling? [
+      set breed piled-balls
+    ]
+  ]
+end
+
+to-report done-falling?  ;; falling-ball procedure
+  report ycor = (min-pycor + 1)
+         or any? piled-balls-on patch-at 0 -1
+end
+
+to new-ball
+  ask patch 0 max-pycor [
+    sprout-falling-balls 1 [
+      set color red
+    ]
+  ]
+  set balls balls + 1
+end
+
+to-report time-for-new-ball?
+  ;; we release a ball every other tick; keeping space
+  ;; between the balls makes it easier to ensure that two
+  ;; balls never simultaneously occupy the same patch
+  report balls < number-of-balls
+         and not any? falling-balls-on patch 0 (max-pycor - 1)
+end
+
+to-report full?
+  report any? counters with [any? piled-balls-on patch-at 0 -1]
+end
+
+
+; Copyright 2002 Uri Wilensky.
+; See Info tab for full copyright and license.
